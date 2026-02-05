@@ -1,11 +1,16 @@
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Threading.RateLimiting;
 using Carter;
 using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using TestAPI.Authentication;
 using TestAPI.Configuration;
 using TestAPI.Data;
 using TestAPI.Middleware;
@@ -25,28 +30,57 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    // Add Serilog
     builder.Host.UseSerilog();
 
-    // Configure JWT Settings
     builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+    builder.Services.Configure<ApiKeySettings>(builder.Configuration.GetSection("ApiKeySettings"));
+
     var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
 
-    // Add Database
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-    // Add Carter
     builder.Services.AddCarter();
 
-    // Add JWT Service
+    builder.Services.AddSingleton<IInputSanitizer, InputSanitizer>();
+    builder.Services.AddSingleton(_ => HtmlEncoder.Default);
+    builder.Services.AddSingleton<IUserService, UserService>();
+    builder.Services.AddSingleton<IRefreshTokenService, RefreshTokenService>();
     builder.Services.AddScoped<IJwtService, JwtService>();
 
-    // Add Authentication
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        {
+            var identifier = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+            return RateLimitPartition.GetFixedWindowLimiter(identifier, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromSeconds(20),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        options.OnRejected = async (context, token) =>
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.Headers["Retry-After"] = "20";
+            await context.HttpContext.Response.WriteAsync("Too many requests. Please try again later.", token);
+        };
+    });
+
     builder.Services.AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = "Combined";
+        options.DefaultChallengeScheme = "Combined";
+    })
+    .AddPolicyScheme("Combined", "JWT or API Key", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+            context.Request.Headers.ContainsKey("X-Api-Key")
+                ? "ApiKey"
+                : JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(options =>
     {
@@ -68,7 +102,7 @@ try
         {
             OnAuthenticationFailed = context =>
             {
-                Log.Warning("Authentication failed: {Message}", context.Exception.Message);
+                Log.Warning("Authentication failed: {Message}", context.Exception?.Message);
                 return Task.CompletedTask;
             },
             OnTokenValidated = context =>
@@ -77,11 +111,15 @@ try
                 return Task.CompletedTask;
             }
         };
+    })
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", _ => { });
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"));
+        options.AddPolicy("UserPolicy", policy => policy.RequireRole("Admin", "User"));
     });
 
-    builder.Services.AddAuthorization();
-
-    // Add CORS
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
     builder.Services.AddCors(options =>
     {
@@ -94,23 +132,19 @@ try
         });
     });
 
-    // Add Health Checks
     builder.Services.AddHealthChecks()
         .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!, name: "postgres");
 
-    // Add OpenAPI/Swagger
     builder.Services.AddOpenApi();
     builder.Services.AddEndpointsApiExplorer();
 
     var app = builder.Build();
 
-    // Configure the HTTP request pipeline
     app.UseSerilogRequestLogging();
+    app.UseRateLimiter();
 
-    // Global Exception Handler
     app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
-    // Security Headers
     app.Use(async (context, next) =>
     {
         context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
@@ -133,10 +167,8 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    // Map Carter endpoints
     app.MapCarter();
 
-    // Health Checks
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
         ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
@@ -154,7 +186,6 @@ try
         ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
     });
 
-    // Apply migrations on startup (optional - for development only)
     if (app.Environment.IsDevelopment())
     {
         using var scope = app.Services.CreateScope();

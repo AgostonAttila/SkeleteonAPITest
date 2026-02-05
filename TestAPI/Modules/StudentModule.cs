@@ -5,6 +5,7 @@ using TestAPI.Data;
 using TestAPI.Entities;
 using TestAPI.Middleware;
 using TestAPI.Models;
+using TestAPI.Services;
 
 namespace TestAPI.Modules;
 
@@ -13,43 +14,42 @@ public class StudentModule : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/students")
-            .WithTags("Students")
-            .RequireAuthorization();
+            .WithTags("Students");
 
-        // GET: Get all students
         group.MapGet("/", GetAllStudents)
             .WithName("GetAllStudents")
             .WithOpenApi()
-            .Produces<ApiResponse<List<StudentResponse>>>(StatusCodes.Status200OK);
+            .Produces<ApiResponse<List<StudentResponse>>>(StatusCodes.Status200OK)
+            .RequireAuthorization("UserPolicy");
 
-        // GET: Get student by ID
         group.MapGet("/{id:guid}", GetStudentById)
             .WithName("GetStudentById")
             .WithOpenApi()
             .Produces<ApiResponse<StudentResponse>>(StatusCodes.Status200OK)
-            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound);
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .RequireAuthorization("UserPolicy");
 
-        // POST: Create new student
         group.MapPost("/", CreateStudent)
             .WithName("CreateStudent")
             .WithOpenApi()
             .Produces<ApiResponse<StudentResponse>>(StatusCodes.Status201Created)
-            .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest);
+            .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
+            .RequireAuthorization("AdminPolicy");
 
-        // PUT: Update student
         group.MapPut("/{id:guid}", UpdateStudent)
             .WithName("UpdateStudent")
             .WithOpenApi()
             .Produces<ApiResponse<StudentResponse>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
-            .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest);
+            .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
+            .RequireAuthorization("AdminPolicy");
 
-        // DELETE: Delete student
         group.MapDelete("/{id:guid}", DeleteStudent)
             .WithName("DeleteStudent")
             .WithOpenApi()
             .Produces<ApiResponse<object>>(StatusCodes.Status200OK)
-            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound);
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .RequireAuthorization("AdminPolicy");
     }
 
     private static async Task<IResult> GetAllStudents(
@@ -144,29 +144,35 @@ public class StudentModule : ICarterModule
         [FromBody] CreateStudentRequest request,
         ApplicationDbContext dbContext,
         ILogger<StudentModule> logger,
+        IInputSanitizer sanitizer,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new student with email: {Email}", request.Email);
 
-        // Check if email already exists
+        var email = sanitizer.Sanitize(request.Email);
+        var firstName = sanitizer.Sanitize(request.FirstName);
+        var lastName = sanitizer.Sanitize(request.LastName);
+        var phone = sanitizer.Sanitize(request.PhoneNumber);
+        var address = request.Address is null ? null : sanitizer.Sanitize(request.Address);
+
         var emailExists = await dbContext.Students
-            .AnyAsync(s => s.Email == request.Email, cancellationToken);
+            .AnyAsync(s => s.Email == email, cancellationToken);
 
         if (emailExists)
         {
-            logger.LogWarning("Student with email {Email} already exists", request.Email);
-            throw new ValidationException($"Student with email {request.Email} already exists");
+            logger.LogWarning("Student with email {Email} already exists", email);
+            throw new ValidationException($"Student with email {email} already exists");
         }
 
         var student = new Student
         {
             Id = Guid.NewGuid(),
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            Email = request.Email,
+            FirstName = firstName,
+            LastName = lastName,
+            Email = email,
             DateOfBirth = request.DateOfBirth,
-            PhoneNumber = request.PhoneNumber,
-            Address = request.Address,
+            PhoneNumber = phone,
+            Address = address,
             CreatedAt = DateTime.UtcNow,
             IsActive = true
         };
@@ -205,6 +211,7 @@ public class StudentModule : ICarterModule
         [FromBody] UpdateStudentRequest request,
         ApplicationDbContext dbContext,
         ILogger<StudentModule> logger,
+        IInputSanitizer sanitizer,
         CancellationToken cancellationToken)
     {
         logger.LogInformation("Updating student with ID: {StudentId}", id);
@@ -218,22 +225,27 @@ public class StudentModule : ICarterModule
             throw new KeyNotFoundException($"Student with ID {id} not found");
         }
 
-        // Check if email already exists for another student
+        var email = sanitizer.Sanitize(request.Email);
+        var firstName = sanitizer.Sanitize(request.FirstName);
+        var lastName = sanitizer.Sanitize(request.LastName);
+        var phone = sanitizer.Sanitize(request.PhoneNumber);
+        var address = request.Address is null ? null : sanitizer.Sanitize(request.Address);
+
         var emailExists = await dbContext.Students
-            .AnyAsync(s => s.Email == request.Email && s.Id != id, cancellationToken);
+            .AnyAsync(s => s.Email == email && s.Id != id, cancellationToken);
 
         if (emailExists)
         {
-            logger.LogWarning("Email {Email} is already used by another student", request.Email);
-            throw new ValidationException($"Email {request.Email} is already used by another student");
+            logger.LogWarning("Email {Email} is already used by another student", email);
+            throw new ValidationException($"Email {email} is already used by another student");
         }
 
-        student.FirstName = request.FirstName;
-        student.LastName = request.LastName;
-        student.Email = request.Email;
+        student.FirstName = firstName;
+        student.LastName = lastName;
+        student.Email = email;
         student.DateOfBirth = request.DateOfBirth;
-        student.PhoneNumber = request.PhoneNumber;
-        student.Address = request.Address;
+        student.PhoneNumber = phone;
+        student.Address = address;
         student.IsActive = request.IsActive;
         student.UpdatedAt = DateTime.UtcNow;
 

@@ -9,7 +9,7 @@ namespace TestAPI.Services;
 
 public interface IJwtService
 {
-    string GenerateToken(string username);
+    string GenerateToken(string username, IEnumerable<string>? roles = null);
     ClaimsPrincipal? ValidateToken(string token);
 }
 
@@ -24,17 +24,25 @@ public class JwtService : IJwtService
         _logger = logger;
     }
 
-    public string GenerateToken(string username)
+    public string GenerateToken(string username, IEnumerable<string>? roles = null)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, username),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.Name, username)
         };
+
+        if (roles is not null)
+        {
+            foreach (var role in roles.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+        }
 
         var token = new JwtSecurityToken(
             issuer: _jwtSettings.Issuer,
@@ -45,7 +53,7 @@ public class JwtService : IJwtService
         );
 
         _logger.LogInformation("JWT token generated for user: {Username}", username);
-        
+
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
@@ -55,7 +63,7 @@ public class JwtService : IJwtService
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes(_jwtSettings.Secret);
-            
+
             var validationParameters = new TokenValidationParameters
             {
                 ValidateIssuerSigningKey = true,

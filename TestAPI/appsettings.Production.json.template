@@ -6,7 +6,12 @@
     "Secret": "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_AT_LEAST_32_CHARACTERS_LONG",
     "Issuer": "StudentAPI",
     "Audience": "StudentAPIClients",
-    "ExpirationInMinutes": 30
+    "ExpirationInMinutes": 30,
+    "RefreshTokenExpirationDays": 7
+  },
+  "ApiKeySettings": {
+    "Key": "CHANGE_THIS_API_KEY",
+    "Role": "Admin"
   },
   "Serilog": {
     "MinimumLevel": {

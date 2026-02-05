@@ -12,6 +12,7 @@ Init commit:
 - ✅ **Create database migration helper**
 - ✅ **Add security headers and CORS configuration**
 
+
 Elkészítettem egy teljes körű, biztonságos ASP.NET Core Minimal API alkalmazást a következő funkciókkal:
 🎯 Implementált funkciók:
 1.	✅ CRUD műveletek - Student entitásra (GetAll, GetById, Create, Update, Delete)
@@ -52,8 +53,8 @@ POST https://localhost:5001/api/auth/login
 GET https://localhost:5001/api/students
 Authorization: Bearer {your-token}
 
-további lehetőségek:
-📋 Javasolt továbbfejlesztések
+2nd step ------------------------------------------------------------------------
+
 🔒 Biztonság & Authentikáció
 •	[ ] Rate Limiting - DDoS védelem, endpoint throttling
 •	[ ] API Key authentikáció - Alternatív auth módszer
@@ -61,6 +62,19 @@ további lehetőségek:
 •	[ ] Password Hashing - Bcrypt/Argon2 a jelszavakhoz (ha user management-et adsz hozzá)
 •	[ ] Role-based Authorization - Admin/User szerepkörök
 •	[ ] Input Sanitization - XSS, SQL injection extra védelem
+
+✅ Update project dependencies
+✅ Add auth/refresh models and helpers
+✅ Implement security services (API key handler, refresh store, sanitization, user repository)
+✅ Refine AuthModule for hashed credentials, roles, refresh tokens, API key issuance
+✅ Secure StudentModule with sanitization and role-based restrictions
+✅ Configure Program.cs for combined authentication, rate limiting, and all services
+
+3rd step ------------------------------------------------------------------------
+
+
+📋 Javasolt továbbfejlesztések
+
 📊 Monitoring & Observability
 •	[ ] Application Insights vagy OpenTelemetry - Telemetria
 •	[ ] Prometheus Metrics - Metrikák exportálása

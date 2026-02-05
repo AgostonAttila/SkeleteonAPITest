@@ -84,7 +84,25 @@ public record LoginRequest
 public record LoginResponse
 {
     public string Token { get; init; } = string.Empty;
+    public string RefreshToken { get; init; } = string.Empty;
     public DateTime ExpiresAt { get; init; }
+    public DateTime RefreshTokenExpiresAt { get; init; }
+    public List<string>? Roles { get; init; }
+}
+
+public record RefreshTokenRequest
+{
+    [Required(ErrorMessage = "Refresh token is required")]
+    public string RefreshToken { get; init; } = string.Empty;
+}
+
+public record RefreshTokenResponse
+{
+    public string Token { get; init; } = string.Empty;
+    public string RefreshToken { get; init; } = string.Empty;
+    public DateTime ExpiresAt { get; init; }
+    public DateTime RefreshTokenExpiresAt { get; init; }
+    public List<string>? Roles { get; init; }
 }
 
 public record ApiResponse<T>
