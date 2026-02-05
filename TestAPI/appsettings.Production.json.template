@@ -1,0 +1,42 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=YOUR_PRODUCTION_HOST;Port=5432;Database=YOUR_DATABASE_NAME;Username=YOUR_USERNAME;Password=YOUR_SECURE_PASSWORD"
+  },
+  "JwtSettings": {
+    "Secret": "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_AT_LEAST_32_CHARACTERS_LONG",
+    "Issuer": "StudentAPI",
+    "Audience": "StudentAPIClients",
+    "ExpirationInMinutes": 30
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Warning",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.AspNetCore": "Warning",
+        "System": "Error"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "/var/log/studentapi/log-.txt",
+          "rollingInterval": "Day",
+          "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+          "retainedFileCountLimit": 30
+        }
+      }
+    ]
+  },
+  "AllowedHosts": "yourdomain.com",
+  "Cors": {
+    "AllowedOrigins": [ "https://yourdomain.com", "https://www.yourdomain.com" ]
+  }
+}
